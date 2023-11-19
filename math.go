@@ -4,22 +4,9 @@ package main
 #cgo CFLAGS: -I/usr/include/webkitgtk-4.0
 #cgo LDFLAGS: -ljavascriptcoregtk-4.0
 #include <JavaScriptCore/JavaScript.h>
-#include <stdlib.h>
-#include <stdio.h>
 
-JSValueRef Add(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception) {
-    if (argumentCount < 2 || arguments == NULL) {
-        printf("The function requires 2 arguments.\n");
-        return JSValueMakeUndefined(context);
-    }
-
-    int numa = JSValueToNumber(context, arguments[0], NULL);
-    int numb = JSValueToNumber(context, arguments[1], NULL);
-
-    int add = numa + numb;
-
-    return JSValueMakeNumber(context, (double)add);
-}
+// Declarar la función GoAdd para que C la reconozca
+extern JSValueRef Add(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 
 */
 import "C"
@@ -27,6 +14,25 @@ import (
 	"fmt"
 	"unsafe"
 )
+
+//export Add
+func Add(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	if argumentCount < 2 || arguments == nil {
+		fmt.Println("La función requiere 2 argumentos.")
+		return C.JSValueMakeUndefined(context)
+	}
+
+	// Convertir la rebanada de argumentos a una rebanada de Go
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+
+	// Resto del código sigue igual
+	numa := int(C.JSValueToNumber(context, argumentSlice[0], nil))
+	numb := int(C.JSValueToNumber(context, argumentSlice[1], nil))
+
+	sum := numa + numb
+
+	return C.JSValueMakeNumber(context, C.double(sum))
+}
 
 func main() {
 	// Crear un contexto JavaScript
