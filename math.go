@@ -25,7 +25,6 @@ func Add(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRe
 	// Convertir la rebanada de argumentos a una rebanada de Go
 	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
 
-	// Resto del código sigue igual
 	numa := int(C.JSValueToNumber(context, argumentSlice[0], nil))
 	numb := int(C.JSValueToNumber(context, argumentSlice[1], nil))
 
