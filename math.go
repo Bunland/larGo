@@ -5,7 +5,7 @@ package main
 #cgo LDFLAGS: -ljavascriptcoregtk-4.0
 #include <JavaScriptCore/JavaScript.h>
 
-// Declarar la función GoAdd para que C la reconozca
+// Declarar la función Add para que C la reconozca
 extern JSValueRef Add(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 
 */
