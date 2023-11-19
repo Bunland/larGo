@@ -22,7 +22,7 @@ func Add(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRe
 		return C.JSValueMakeUndefined(context)
 	}
 
-	// Convertir la rebanada de argumentos a una rebanada de Go
+	// Convertir la rebanada de argumentos a una rebanada/slice de Go
 	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
 
 	numa := int(C.JSValueToNumber(context, argumentSlice[0], nil))
