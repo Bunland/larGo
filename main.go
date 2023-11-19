@@ -19,7 +19,7 @@ func main() {
 	defer C.JSGlobalContextRelease(context)
 
 	// Crear una cadena JavaScript
-	jsCode := C.JSStringCreateWithUTF8CString(C.CString("const some = 'hello sdfsdfsdf'; some"))
+	jsCode := C.JSStringCreateWithUTF8CString(C.CString("const some = 'hello world'; some"))
 	defer C.JSStringRelease(jsCode)
 
 	// Evaluar el código JavaScript en el contexto
