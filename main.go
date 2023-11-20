@@ -7,37 +7,68 @@ package main
 #include <stdlib.h>
 */
 import "C"
-
 import (
 	"fmt"
+	"largo/src/math"
+	"largo/src/utils"
+	"os"
 )
 
-func main() {
-	// Crear un contexto JavaScript
-	context := C.JSGlobalContextCreate(nil)
+// createCustomFunction crea una función JavaScript personalizada y la establece como propiedad del objeto global.
+func createCustomFunction(context C.JSGlobalContextRef, globalObject C.JSObjectRef, functionName string, functionCallback C.JSObjectCallAsFunctionCallback) {
+	// Crear una cadena JavaScript a partir del nombre de la función en formato UTF-8.
+	functionString := C.JSStringCreateWithUTF8CString(C.CString(functionName))
 
-	// Crear un objeto JavaScript
+	// Crear un objeto de función JavaScript usando la cadena y la devolución de llamada de la función.
+	functionObject := C.JSObjectMakeFunctionWithCallback(context, functionString, functionCallback)
+
+	// Establecer la función recién creada como propiedad del objeto global.
+	C.JSObjectSetProperty(context, globalObject, functionString, functionObject, C.kJSPropertyAttributeNone, nil)
+
+	// Liberar la cadena de función creada con JSStringCreateWithUTF8CString para evitar fugas de memoria.
+	C.JSStringRelease(functionString)
+}
+
+// Apis define las API disponibles en JavaScript.
+func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
+	createCustomFunction(context, globalObject, "Add", C.JSObjectCallAsFunctionCallback(math.Add()))
+}
+
+func main() {
+	// Crear un contexto JavaScript global.
+	context := C.JSGlobalContextCreate(nil)
 	globalObject := C.JSContextGetGlobalObject(context)
 
-	// Crear un script de JavaScript
-	script := "var mensaje = '¡Hello world from JavaScript!'; mensaje;"
-	scriptJS := C.JSStringCreateWithUTF8CString(C.CString(script))
-	defer C.JSStringRelease(scriptJS)
+	// Configurar las API en el objeto global.
+	Apis(context, globalObject)
 
-	// Evaluar el script
-	result := C.JSEvaluateScript(context, scriptJS, globalObject, nil, 1, nil)
+	// Verificar si hay argumentos de línea de comandos y si se proporciona el comando "run".
+	if len(os.Args) > 2 && os.Args[1] == "run" {
+		jsFileName := os.Args[2]
 
-	// Convertir el resultado a una cadena de Go
-	resultStringJS := C.JSValueToStringCopy(context, result, nil)
-	defer C.JSStringRelease(resultStringJS)
+		// Leer el contenido del archivo JavaScript.
+		fileContent := utils.ReadFile(jsFileName)
 
-	bufferSize := C.JSStringGetMaximumUTF8CStringSize(resultStringJS)
-	resultCString := make([]C.char, bufferSize)
-	C.JSStringGetUTF8CString(resultStringJS, &resultCString[0], bufferSize)
+		// Crear una cadena JavaScript a partir del contenido del archivo.
+		jsCode := C.JSStringCreateWithUTF8CString(C.CString(fileContent))
+		defer C.JSStringRelease(jsCode)
 
-	// Imprimir el resultado
-	fmt.Printf("Resultado: %s\n", C.GoString(&resultCString[0]))
+		// Evaluar el script JavaScript.
+		result := C.JSEvaluateScript(context, jsCode, globalObject, nil, 1, nil)
 
-	// Liberar recursos
+		// Convertir el resultado a una cadena de Go.
+		resultStringJS := C.JSValueToStringCopy(context, result, nil)
+		defer C.JSStringRelease(resultStringJS)
+
+		// Obtener el tamaño máximo necesario para la cadena UTF-8.
+		bufferSize := C.JSStringGetMaximumUTF8CStringSize(resultStringJS)
+		resultCString := make([]C.char, bufferSize)
+		C.JSStringGetUTF8CString(resultStringJS, &resultCString[0], bufferSize)
+
+		// Imprimir el resultado.
+		fmt.Printf("%s\n", C.GoString(&resultCString[0]))
+	}
+
+	// Liberar el contexto JavaScript global.
 	C.JSGlobalContextRelease(context)
 }
