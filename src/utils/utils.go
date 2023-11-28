@@ -2,13 +2,15 @@ package utils
 
 import (
 	"fmt"
-	"io/ioutil"
+	"os"
+	"strings"
+
+	"github.com/evanw/esbuild/pkg/api"
 )
 
 // ReadFile lee el contenido de un archivo y devuelve su contenido como una cadena.
 func ReadFile(filename string) string {
-	// Intentar leer el contenido del archivo.
-	content, err := ioutil.ReadFile(filename)
+	content, err := os.ReadFile(filename)
 
 	// Verificar si hay errores al abrir el archivo.
 	if err != nil {
@@ -16,6 +18,19 @@ func ReadFile(filename string) string {
 		return ""
 	}
 
-	// Devolver el contenido del archivo como una cadena.
+	if strings.HasSuffix(filename, ".ts") {
+		result := api.Transform(string(content), api.TransformOptions{
+			Loader: api.LoaderTS,
+			TsconfigRaw: `{
+				"experimentalDecorators": true,
+				"emitDecoratorMetadata": true,
+				"allowJs": true,
+			}`,
+		})
+		if len(result.Errors) != 0 {
+			os.Exit(1)
+		}
+		return string(result.Code)
+	}
 	return string(content)
 }
