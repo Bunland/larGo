@@ -8,13 +8,20 @@ package main
 */
 import "C"
 import (
+	"bufio"
 	"fmt"
 	"largo/src/console"
+	"largo/src/fs"
 	"largo/src/math"
 	"largo/src/require"
 	"largo/src/utils"
 	"os"
+	"os/signal"
 	"unsafe"
+
+	"github.com/evanw/esbuild/pkg/api"
+
+	"github.com/fatih/color"
 )
 
 // createCustomFunction crea una función JavaScript personalizada y la establece como propiedad del objeto global.
@@ -34,19 +41,37 @@ func createCustomFunction(context C.JSGlobalContextRef, globalObject C.JSObjectR
 
 // Apis define las API disponibles en JavaScript.
 func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
-	createCustomFunction(context, globalObject, "Add", C.JSObjectCallAsFunctionCallback(math.Add()))
-	createCustomFunction(context, globalObject, "Mult", C.JSObjectCallAsFunctionCallback(math.Mult()))
-	createCustomFunction(context, globalObject, "require", C.JSObjectCallAsFunctionCallback(require.Require()))
-	createCustomFunction(context, globalObject, "print", C.JSObjectCallAsFunctionCallback(console.Log()))
 	console_str := C.CString("console")
 	console_js := C.JSStringCreateWithUTF8CString(console_str)
 	C.free(unsafe.Pointer(console_str))
 	consoleGlobalObject := C.JSObjectMake(context, nil, nil)
 	C.JSObjectSetProperty(context, globalObject, console_js, consoleGlobalObject, C.kJSPropertyAttributeNone, nil)
+	lar_str := C.CString("Lar")
+	lar_js := C.JSStringCreateWithUTF8CString(lar_str)
+	C.free(unsafe.Pointer(lar_str))
+	larGlobalObject := C.JSObjectMake(context, nil, nil)
+	C.JSObjectSetProperty(context, globalObject, lar_js, larGlobalObject, C.kJSPropertyAttributeNone, nil)
+	fs_str := C.CString("fs")
+	fs_js := C.JSStringCreateWithUTF8CString(fs_str)
+	C.free(unsafe.Pointer(fs_str))
+	fsGlobalObject := C.JSObjectMake(context, nil, nil)
+	C.JSObjectSetProperty(context, globalObject, fs_js, fsGlobalObject, C.kJSPropertyAttributeNone, nil)
+	createCustomFunction(context, globalObject, "Add", C.JSObjectCallAsFunctionCallback(math.Add()))
+	createCustomFunction(context, globalObject, "Mult", C.JSObjectCallAsFunctionCallback(math.Mult()))
+	createCustomFunction(context, globalObject, "Div", C.JSObjectCallAsFunctionCallback(math.Div()))
+	createCustomFunction(context, globalObject, "require", C.JSObjectCallAsFunctionCallback(require.Require()))
+	createCustomFunction(context, globalObject, "print", C.JSObjectCallAsFunctionCallback(console.Log()))
+	createCustomFunction(context, globalObject, "prompt", C.JSObjectCallAsFunctionCallback(console.Prompt()))
 	createCustomFunction(context, consoleGlobalObject, "log", C.JSObjectCallAsFunctionCallback(console.Log()))
+	createCustomFunction(context, consoleGlobalObject, "error", C.JSObjectCallAsFunctionCallback(console.Error()))
 	createCustomFunction(context, consoleGlobalObject, "time", C.JSObjectCallAsFunctionCallback(console.Time()))
 	createCustomFunction(context, consoleGlobalObject, "timeEnd", C.JSObjectCallAsFunctionCallback(console.TimeEnd()))
+	createCustomFunction(context, consoleGlobalObject, "clear", C.JSObjectCallAsFunctionCallback(console.Clear()))
+	createCustomFunction(context, larGlobalObject, "color", C.JSObjectCallAsFunctionCallback(console.Color()))
+	createCustomFunction(context, fsGlobalObject, "readFile", C.JSObjectCallAsFunctionCallback(fs.ReadFile()))
 	C.JSStringRelease(console_js)
+	C.JSStringRelease(lar_js)
+	C.JSStringRelease(fs_js)
 }
 
 func main() {
@@ -58,14 +83,21 @@ func main() {
 	Apis(context, globalObject)
 
 	// Verificar si hay argumentos de línea de comandos y si se proporciona el comando "run".
-	if len(os.Args) > 2 && os.Args[1] == "run" {
+	switch os.Args[1] {
+	case "run":
+		if len(os.Args) < 2 {
+			color.New(color.BgRed).Println("No JavaScript/TypeScript file provided to execute")
+			os.Exit(1)
+		}
 		jsFileName := os.Args[2]
 
 		// Leer el contenido del archivo JavaScript.
 		fileContent := utils.ReadFile(jsFileName)
 
 		// Crear una cadena JavaScript a partir del contenido del archivo.
-		jsCode := C.JSStringCreateWithUTF8CString(C.CString(fileContent))
+		fileContentC := C.CString(fileContent)
+		jsCode := C.JSStringCreateWithUTF8CString(fileContentC)
+		C.free(unsafe.Pointer(fileContentC))
 		defer C.JSStringRelease(jsCode)
 
 		// Evaluar el script JavaScript.
@@ -82,6 +114,56 @@ func main() {
 
 		// Imprimir el resultado.
 		fmt.Printf("%s\n", C.GoString(&resultCString[0]))
+	case "repl":
+		// Iniciar el modo REPL.
+		for {
+			fmt.Print("> ")
+			reader := bufio.NewReader(os.Stdin)
+			content, err := reader.ReadString('\n')
+			if err != nil {
+				color.New(color.BgRed).Println("Error reading input")
+				fmt.Println(err)
+				os.Exit(1)
+			}
+			result_ts := api.Transform(string(content), api.TransformOptions{
+				Loader: api.LoaderTS,
+				TsconfigRaw: `{
+					"experimentalDecorators": true,
+					"emitDecoratorMetadata": true,
+					"allowJs": true,
+				}`,
+				Format: api.FormatCommonJS,
+			})
+			if len(result_ts.Errors) != 0 {
+				os.Exit(1)
+			}
+			content = string(result_ts.Code)
+
+			contentC := C.CString(content)
+			jsCode := C.JSStringCreateWithUTF8CString(contentC)
+			C.free(unsafe.Pointer(contentC))
+			defer C.JSStringRelease(jsCode)
+
+			result := C.JSEvaluateScript(context, jsCode, globalObject, nil, 1, nil)
+			resultStringJS := C.JSValueToStringCopy(context, result, nil)
+			defer C.JSStringRelease(resultStringJS)
+
+			bufferSize := C.JSStringGetMaximumUTF8CStringSize(resultStringJS)
+			resultCString := make([]C.char, bufferSize)
+			C.JSStringGetUTF8CString(resultStringJS, &resultCString[0], bufferSize)
+			fmt.Printf("%s\n", C.GoString(&resultCString[0]))
+			c := make(chan os.Signal, 1)
+			signal.Notify(c, os.Interrupt)
+			go func() {
+				for range c {
+					fmt.Print("\n")
+					os.Exit(0)
+				}
+			}()
+		}
+	default:
+		color.New(color.BgRed).Println("No command provided")
+		os.Exit(1)
 	}
 
 	// Liberar el contexto JavaScript global.
