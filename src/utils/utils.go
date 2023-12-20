@@ -18,19 +18,28 @@ func ReadFile(filename string) string {
 		return ""
 	}
 
+	var result api.TransformResult
+
 	if strings.HasSuffix(filename, ".ts") {
-		result := api.Transform(string(content), api.TransformOptions{
+		result = api.Transform(string(content), api.TransformOptions{
 			Loader: api.LoaderTS,
 			TsconfigRaw: `{
 				"experimentalDecorators": true,
 				"emitDecoratorMetadata": true,
 				"allowJs": true,
 			}`,
+			Format: api.FormatCommonJS,
 		})
 		if len(result.Errors) != 0 {
 			os.Exit(1)
 		}
 		return string(result.Code)
 	}
-	return string(content)
+
+	result = api.Transform(string(content), api.TransformOptions{
+		Loader: api.LoaderJS,
+		Format: api.FormatCommonJS,
+	})
+
+	return string(result.Code)
 }
