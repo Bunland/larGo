@@ -125,7 +125,11 @@ func main() {
 				fmt.Println(err)
 				os.Exit(1)
 			}
-			result_ts := api.Transform(string(content), api.TransformOptions{
+			if content == ".exit" {
+				fmt.Print("\n")
+				os.Exit(0)
+			}
+			result_ts := api.Transform(string("_ ="+content), api.TransformOptions{
 				Loader: api.LoaderTS,
 				TsconfigRaw: `{
 					"experimentalDecorators": true,
