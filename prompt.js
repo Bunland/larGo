@@ -1,2 +1,2 @@
-const question = prompt("Hola, ¿Cómo estás?")
+const question = prompt("Hola, ¿Cómo estás? ")
 console.log(question)

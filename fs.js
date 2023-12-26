@@ -1,2 +1,2 @@
-const text = fs.readFile("example.txt", { encoding: "base64" })
+const text = fs.readFileSync("example.txt", { encoding: "hex" })
 console.log(text)

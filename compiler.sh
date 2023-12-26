@@ -1,4 +1,3 @@
 #!/bin/bash
-
 go build -o lar
-./lar run ./index.js
+./lar run fs.js

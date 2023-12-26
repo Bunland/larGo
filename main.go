@@ -68,7 +68,7 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, consoleGlobalObject, "timeEnd", C.JSObjectCallAsFunctionCallback(console.TimeEnd()))
 	createCustomFunction(context, consoleGlobalObject, "clear", C.JSObjectCallAsFunctionCallback(console.Clear()))
 	createCustomFunction(context, larGlobalObject, "color", C.JSObjectCallAsFunctionCallback(console.Color()))
-	createCustomFunction(context, fsGlobalObject, "readFile", C.JSObjectCallAsFunctionCallback(fs.ReadFile()))
+	createCustomFunction(context, fsGlobalObject, "readFileSync", C.JSObjectCallAsFunctionCallback(fs.ReadFileSync()))
 	C.JSStringRelease(console_js)
 	C.JSStringRelease(lar_js)
 	C.JSStringRelease(fs_js)
