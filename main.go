@@ -26,8 +26,14 @@ import (
 
 // createCustomFunction crea una función JavaScript personalizada y la establece como propiedad del objeto global.
 func createCustomFunction(context C.JSGlobalContextRef, globalObject C.JSObjectRef, functionName string, functionCallback C.JSObjectCallAsFunctionCallback) {
+	// Crear el string de C
+	functionNameC := C.CString(functionName)
+
 	// Crear una cadena JavaScript a partir del nombre de la función en formato UTF-8.
-	functionString := C.JSStringCreateWithUTF8CString(C.CString(functionName))
+	functionString := C.JSStringCreateWithUTF8CString(functionNameC)
+
+	// Liberar el string de C
+	C.free(unsafe.Pointer(functionNameC))
 
 	// Crear un objeto de función JavaScript usando la cadena y la devolución de llamada de la función.
 	functionObject := C.JSObjectMakeFunctionWithCallback(context, functionString, functionCallback)
@@ -69,6 +75,7 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, consoleGlobalObject, "clear", C.JSObjectCallAsFunctionCallback(console.Clear()))
 	createCustomFunction(context, larGlobalObject, "color", C.JSObjectCallAsFunctionCallback(console.Color()))
 	createCustomFunction(context, fsGlobalObject, "readFileSync", C.JSObjectCallAsFunctionCallback(fs.ReadFileSync()))
+	createCustomFunction(context, fsGlobalObject, "writeFileSync", C.JSObjectCallAsFunctionCallback(fs.WriteFileSync()))
 	C.JSStringRelease(console_js)
 	C.JSStringRelease(lar_js)
 	C.JSStringRelease(fs_js)
@@ -146,16 +153,17 @@ func main() {
 			contentC := C.CString(content)
 			jsCode := C.JSStringCreateWithUTF8CString(contentC)
 			C.free(unsafe.Pointer(contentC))
-			defer C.JSStringRelease(jsCode)
 
 			result := C.JSEvaluateScript(context, jsCode, globalObject, nil, 1, nil)
+			C.JSStringRelease(jsCode)
 			resultStringJS := C.JSValueToStringCopy(context, result, nil)
-			defer C.JSStringRelease(resultStringJS)
 
 			bufferSize := C.JSStringGetMaximumUTF8CStringSize(resultStringJS)
 			resultCString := make([]C.char, bufferSize)
 			C.JSStringGetUTF8CString(resultStringJS, &resultCString[0], bufferSize)
+			C.JSStringRelease(resultStringJS)
 			fmt.Printf("%s\n", C.GoString(&resultCString[0]))
+
 			c := make(chan os.Signal, 1)
 			signal.Notify(c, os.Interrupt)
 			go func() {

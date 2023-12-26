@@ -7,6 +7,7 @@ package fs
 #include <JavaScriptCore/JavaScript.h>
 
 extern JSValueRef ReadFileSyncF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef WriteFileSyncF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 */
 import "C"
 import (
@@ -78,7 +79,40 @@ func ReadFileSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.
 	return
 }
 
+// WriteFileSyncF hace la función fs.writeFileSync() de JavaScript.
+//
+//export WriteFileSyncF
+func WriteFileSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	if int(argumentCount) < 2 {
+		return C.JSValueMakeUndefined(context)
+	}
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+	buffer := C.malloc(bufferSize)
+	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+	fileName := C.GoString((*C.char)(buffer))
+
+	contentStr := C.JSValueToStringCopy(context, argumentSlice[1], nil)
+	bufferSizeContent := C.JSStringGetMaximumUTF8CStringSize(contentStr)
+	bufferContent := C.malloc(bufferSizeContent)
+	C.JSStringGetUTF8CString(contentStr, (*C.char)(bufferContent), bufferSizeContent)
+	content := C.GoString((*C.char)(bufferContent))
+
+	err := os.WriteFile(fileName, []byte(content), 06444)
+	if err != nil {
+		return C.JSValueMakeNull(context)
+	}
+
+	return C.JSValueMakeUndefined(context)
+}
+
 // ReadFileSync devuelve la función callback de JavaScript en C para la función ReadFileSync en JavaScript
 func ReadFileSync() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.ReadFileSyncF)
+}
+
+// WriteFileSync devuelve la función callback de JavaScript en C para la función WriteFileSync en JavaScript
+func WriteFileSync() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.WriteFileSyncF)
 }
