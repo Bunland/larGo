@@ -9,6 +9,7 @@ package console
 // Declarar las funciones LogF, TimeF, TimeEndF para que C reconozca su existencia.
 extern JSValueRef LogF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef ErrorF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef AssertF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef TimeF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef TimeEndF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef ClearF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
@@ -86,6 +87,59 @@ func ErrorF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjec
 	}
 	fmt.Print("\n")
 
+	return C.JSValueMakeUndefined(context)
+}
+
+// Assert es la implementación de console.assert de JavaScript
+//
+//export AssertF
+func AssertF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	if int(argumentCount) <= 0 {
+		return C.JSValueMakeNull(context)
+	}
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	assertionNoFailed := C.JSValueToBoolean(context, argumentSlice[0])
+	if !assertionNoFailed {
+		var text string = " "
+		for index := 1; index < len(argumentSlice); index += 1 {
+			if C.JSValueIsObject(context, argumentSlice[index]) {
+				json := C.JSValueCreateJSONString(context, argumentSlice[index], 0, exception)
+				maximumSize := C.JSStringGetMaximumUTF8CStringSize(json)
+				buffer := C.malloc(maximumSize)
+				C.JSStringGetUTF8CString(json, (*C.char)(buffer), maximumSize)
+				jsonString := C.GoString((*C.char)(buffer))
+				C.free(unsafe.Pointer(buffer))
+				text += jsonString + ", "
+			} else if C.JSValueIsString(context, argumentSlice[index]) {
+				str := C.JSValueToStringCopy(context, argumentSlice[index], nil)
+				bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+				buffer := C.malloc(bufferSize)
+				C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+				text += C.GoString((*C.char)(buffer)) + ", "
+				C.free(unsafe.Pointer(buffer))
+			} else if C.JSValueIsNumber(context, argumentSlice[index]) {
+				number := C.JSValueToNumber(context, argumentSlice[index], exception)
+				text += fmt.Sprintf("%f, ", number)
+			} else if C.JSValueIsBoolean(context, argumentSlice[index]) {
+				boolean := C.JSValueToBoolean(context, argumentSlice[index])
+				if boolean {
+					text += "true, "
+				} else {
+					text += "false, "
+				}
+			} else if C.JSValueIsNull(context, argumentSlice[index]) {
+				text += "null, "
+			} else {
+				text += "undefined, "
+			}
+		}
+		textWithoutCommaAndSpace, _ := strings.CutSuffix(text, ", ")
+		if strings.TrimSpace(textWithoutCommaAndSpace) == "" {
+			fmt.Println("Assertion failed")
+		} else {
+			fmt.Println("Assertion failed:" + textWithoutCommaAndSpace)
+		}
+	}
 	return C.JSValueMakeUndefined(context)
 }
 
@@ -222,36 +276,42 @@ func PromptF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObje
 	return C.JSValueMakeString(context, file_c_string)
 }
 
-// Log devuelve la función de callback de C para la función Log en JavaScript.
+// Log devuelve la función de callback de C para la función console.log() en JavaScript.
 func Log() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.LogF)
 }
 
-// Time devuelve la función de callback de C para la función Time en JavaScript.
+// Time devuelve la función de callback de C para la función console.time() en JavaScript.
 func Time() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.TimeF)
 }
 
-// TimeEnd devuelve la función de callback de C para la función TimeEnd en JavaScript.
+// TimeEnd devuelve la función de callback de C para la función console.timeEnd() en JavaScript.
 func TimeEnd() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.TimeEndF)
 }
 
-// Clear devuelve la función de callback de C para la función Clear en JavaScript.
+// Clear devuelve la función de callback de C para la función console.clear() en JavaScript.
 func Clear() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.ClearF)
 }
 
-// Error devuelve la función de callback de C para la función Error en JavaScript.
+// Error devuelve la función de callback de C para la función console.error() en JavaScript.
 func Error() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.ErrorF)
 }
 
-// Color devuelve la función de callback de C para la función Color en JavaScript.
+// Color devuelve la función de callback de C para la función Lar.color() en JavaScript.
 func Color() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.ColorF)
 }
 
+// Prompt devuelve la función callback de C para la función prompt() de JavaScript.
 func Prompt() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.PromptF)
+}
+
+// Assert devuelve la función callback de C para la función console.assert() de JavaScript.
+func Assert() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.AssertF)
 }
