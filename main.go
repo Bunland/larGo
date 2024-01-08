@@ -11,8 +11,8 @@ import (
 	"bufio"
 	"fmt"
 	"largo/src/console"
-	"largo/src/fs"
 	"largo/src/math"
+	"largo/src/modules"
 	"largo/src/require"
 	"largo/src/utils"
 	"os"
@@ -52,16 +52,45 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	C.free(unsafe.Pointer(console_str))
 	consoleGlobalObject := C.JSObjectMake(context, nil, nil)
 	C.JSObjectSetProperty(context, globalObject, console_js, consoleGlobalObject, C.kJSPropertyAttributeNone, nil)
+	C.JSStringRelease(console_js)
 	lar_str := C.CString("Lar")
 	lar_js := C.JSStringCreateWithUTF8CString(lar_str)
 	C.free(unsafe.Pointer(lar_str))
 	larGlobalObject := C.JSObjectMake(context, nil, nil)
+	versionString := C.CString("version")
+	versionStringJS := C.JSStringCreateWithUTF8CString(versionString)
+	versionValue := C.CString("0.0.1")
+	versionValueJS := C.JSStringCreateWithUTF8CString(versionValue)
+	versionValueJSString := C.JSValueMakeString(context, versionValueJS)
+	C.JSObjectSetProperty(context, larGlobalObject, versionStringJS, versionValueJSString, C.kJSPropertyAttributeNone, nil)
+	C.free(unsafe.Pointer(versionString))
+	C.free(unsafe.Pointer(versionValue))
+	C.JSStringRelease(versionStringJS)
+	C.JSStringRelease(versionValueJS)
 	C.JSObjectSetProperty(context, globalObject, lar_js, larGlobalObject, C.kJSPropertyAttributeNone, nil)
+	C.JSStringRelease(lar_js)
+	process_str := C.CString("process")
+	process_js := C.JSStringCreateWithUTF8CString(process_str)
+	C.free(unsafe.Pointer(process_str))
+	processGlobalObject := C.JSObjectMake(context, nil, nil)
+	processVersionString := C.CString("version")
+	processVersionStringJS := C.JSStringCreateWithUTF8CString(processVersionString)
+	processVersionValue := C.CString("20.10.0")
+	processVersionValueJS := C.JSStringCreateWithUTF8CString(processVersionValue)
+	processVersionValueJSString := C.JSValueMakeString(context, processVersionValueJS)
+	C.JSObjectSetProperty(context, processGlobalObject, processVersionStringJS, processVersionValueJSString, C.kJSPropertyAttributeNone, nil)
+	C.free(unsafe.Pointer(processVersionString))
+	C.free(unsafe.Pointer(processVersionValue))
+	C.JSStringRelease(processVersionStringJS)
+	C.JSStringRelease(processVersionValueJS)
+	C.JSObjectSetProperty(context, globalObject, process_js, processGlobalObject, C.kJSPropertyAttributeNone, nil)
+	C.JSStringRelease(process_js)
 	fs_str := C.CString("fs")
 	fs_js := C.JSStringCreateWithUTF8CString(fs_str)
 	C.free(unsafe.Pointer(fs_str))
 	fsGlobalObject := C.JSObjectMake(context, nil, nil)
 	C.JSObjectSetProperty(context, globalObject, fs_js, fsGlobalObject, C.kJSPropertyAttributeNone, nil)
+	C.JSStringRelease(fs_js)
 	createCustomFunction(context, globalObject, "Add", C.JSObjectCallAsFunctionCallback(math.Add()))
 	createCustomFunction(context, globalObject, "Mult", C.JSObjectCallAsFunctionCallback(math.Mult()))
 	createCustomFunction(context, globalObject, "Div", C.JSObjectCallAsFunctionCallback(math.Div()))
@@ -70,15 +99,12 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, globalObject, "prompt", C.JSObjectCallAsFunctionCallback(console.Prompt()))
 	createCustomFunction(context, consoleGlobalObject, "log", C.JSObjectCallAsFunctionCallback(console.Log()))
 	createCustomFunction(context, consoleGlobalObject, "error", C.JSObjectCallAsFunctionCallback(console.Error()))
+	createCustomFunction(context, consoleGlobalObject, "assert", C.JSObjectCallAsFunctionCallback(console.Assert()))
 	createCustomFunction(context, consoleGlobalObject, "time", C.JSObjectCallAsFunctionCallback(console.Time()))
 	createCustomFunction(context, consoleGlobalObject, "timeEnd", C.JSObjectCallAsFunctionCallback(console.TimeEnd()))
 	createCustomFunction(context, consoleGlobalObject, "clear", C.JSObjectCallAsFunctionCallback(console.Clear()))
 	createCustomFunction(context, larGlobalObject, "color", C.JSObjectCallAsFunctionCallback(console.Color()))
-	createCustomFunction(context, fsGlobalObject, "readFileSync", C.JSObjectCallAsFunctionCallback(fs.ReadFileSync()))
-	createCustomFunction(context, fsGlobalObject, "writeFileSync", C.JSObjectCallAsFunctionCallback(fs.WriteFileSync()))
-	C.JSStringRelease(console_js)
-	C.JSStringRelease(lar_js)
-	C.JSStringRelease(fs_js)
+	modules.Register("fs", "node:fs")
 }
 
 func main() {
