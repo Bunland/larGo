@@ -1,13 +1,15 @@
 package fs
 
 /*
-#cgo CFLAGS: -I/usr/include/webkitgtk-4.0
-#cgo LDFLAGS: -ljavascriptcoregtk-4.0
+#cgo CFLAGS: -I/usr/include/webkitgtk-4.1
+#cgo LDFLAGS: -ljavascriptcoregtk-4.1
 #include <stdlib.h>
 #include <JavaScriptCore/JavaScript.h>
 
 extern JSValueRef ReadFileSyncF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef WriteFileSyncF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef ReadDirSyncF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef MkDirSyncF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 */
 import "C"
 import (
@@ -64,17 +66,22 @@ func ReadFileSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.
 	switch encoding {
 	case "base64":
 		cString := C.CString(base64.StdEncoding.EncodeToString(file))
-		finalValue = C.JSValueMakeString(context, C.JSStringCreateWithUTF8CString(cString))
+		jsString := C.JSStringCreateWithUTF8CString(cString)
+		finalValue = C.JSValueMakeString(context, jsString)
+		C.JSStringRelease(jsString)
 		C.free(unsafe.Pointer(cString))
 	case "utf8", "utf-8":
 		cString := C.CString(string(file))
 		fileCString := C.JSStringCreateWithUTF8CString(cString)
 		C.free(unsafe.Pointer(cString))
 		finalValue = C.JSValueMakeString(context, fileCString)
+		C.JSStringRelease(fileCString)
 	case "hex":
 		cString := C.CString(hex.EncodeToString(file))
-		finalValue = C.JSValueMakeString(context, C.JSStringCreateWithUTF8CString(cString))
+		jsString := C.JSStringCreateWithUTF8CString(cString)
+		finalValue = C.JSValueMakeString(context, jsString)
 		C.free(unsafe.Pointer(cString))
+		C.JSStringRelease(jsString)
 	}
 	return
 }
@@ -107,12 +114,78 @@ func WriteFileSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C
 	return C.JSValueMakeUndefined(context)
 }
 
-// ReadFileSync devuelve la función callback de JavaScript en C para la función ReadFileSync en JavaScript
+// ReadDirSyncF representa la función fs.readdirSync() de JavaScript.
+//
+//export ReadDirSyncF
+func ReadDirSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	if int(argumentCount) < 1 {
+		return C.JSValueMakeUndefined(context)
+	}
+
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+	buffer := C.malloc(bufferSize)
+	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+	dirName := C.GoString((*C.char)(buffer))
+
+	files, err := os.ReadDir(dirName)
+	C.free(unsafe.Pointer(buffer))
+	if err != nil {
+		return C.JSValueMakeUndefined(context)
+	}
+	newFiles := make([]C.JSValueRef, len(files))
+	for index, item := range files {
+		itemCString := C.CString(item.Name())
+		itemJSOpaqueString := C.JSStringCreateWithUTF8CString(itemCString)
+		C.free(unsafe.Pointer(itemCString))
+		itemValueString := C.JSValueMakeString(context, itemJSOpaqueString)
+		C.JSStringRelease(itemJSOpaqueString)
+		newFiles[index] = itemValueString
+	}
+	objectArray := C.JSObjectMakeArray(context, C.ulong(len(newFiles)), &newFiles[0], exception)
+	return (C.JSValueRef)(objectArray)
+}
+
+// MkDirSyncF representa la función fs.mkdirSync() de JavaScript.
+//
+//export MkDirSyncF
+func MkDirSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	if int(argumentCount) < 1 {
+		return C.JSValueMakeUndefined(context)
+	}
+
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+	buffer := C.malloc(bufferSize)
+	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+	dirName := C.GoString((*C.char)(buffer))
+
+	err := os.Mkdir(dirName, 0755)
+	C.free(unsafe.Pointer(buffer))
+	if err != nil {
+		return C.JSValueMakeUndefined(context)
+	}
+	return C.JSValueMakeUndefined(context)
+}
+
+// ReadFileSync devuelve la función callback de JavaScript en C para la función readFileSync en JavaScript.
 func ReadFileSync() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.ReadFileSyncF)
 }
 
-// WriteFileSync devuelve la función callback de JavaScript en C para la función WriteFileSync en JavaScript
+// WriteFileSync devuelve la función callback de JavaScript en C para la función fs.writeFileSync() en JavaScript.
 func WriteFileSync() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.WriteFileSyncF)
+}
+
+// ReadDirSync devuelve la función callback de JavaScript en C para la función fs.readdirSync() en JavaScript.
+func ReadDirSync() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.ReadDirSyncF)
+}
+
+// MkDirSync devuelve la función callback de JavaScript en C para la función fs.mkdirSync() en JavaScript.
+func MkDirSync() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.MkDirSyncF)
 }
