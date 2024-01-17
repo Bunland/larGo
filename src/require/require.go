@@ -1,8 +1,8 @@
 package require
 
 /*
-#cgo CFLAGS: -I/usr/include/webkitgtk-4.0
-#cgo LDFLAGS: -ljavascriptcoregtk-4.0
+#cgo CFLAGS: -I/usr/include/webkitgtk-4.1
+#cgo LDFLAGS: -ljavascriptcoregtk-4.1
 #include <stdlib.h>
 #include <JavaScriptCore/JavaScript.h>
 
@@ -11,9 +11,30 @@ extern JSValueRef RequireF(JSContextRef context, JSObjectRef function, JSObjectR
 import "C"
 import (
 	"largo/src/fs"
+	"largo/src/modules"
 	"largo/src/utils"
+	"os"
+	"strings"
 	"unsafe"
 )
+
+func itemExists(array []string, item string) (value bool) {
+	value = false
+	for _, str := range array {
+		if str == item {
+			value = true
+		}
+	}
+	return
+}
+
+func fileExists(path string) (value bool) {
+	value = true
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		value = false
+	}
+	return
+}
 
 // createCustomFunction crea una función JavaScript personalizada y la establece como propiedad del objeto global.
 func createCustomFunction(context C.JSContextRef, globalObject C.JSObjectRef, functionName string, functionCallback C.JSObjectCallAsFunctionCallback) {
@@ -51,25 +72,47 @@ func RequireF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObj
 	module := C.GoString((*C.char)(buffer))
 	C.free(unsafe.Pointer(buffer))
 
-	switch module {
-	case "fs", "node:fs":
-		fsObject := C.JSObjectMake(context, nil, nil)
-		createCustomFunction(context, fsObject, "readFileSync", C.JSObjectCallAsFunctionCallback(fs.ReadFileSync()))
-		createCustomFunction(context, fsObject, "writeFileSync", C.JSObjectCallAsFunctionCallback(fs.WriteFileSync()))
-
-		finalValue = (C.JSValueRef)(fsObject)
-	default:
-		content := utils.ReadFile(module)
+	if ok := itemExists(modules.Commands, module); ok {
+		apiObject := C.JSObjectMake(context, nil, nil)
+		switch module {
+		case "fs", "node:fs":
+			createCustomFunction(context, apiObject, "readFileSync", C.JSObjectCallAsFunctionCallback(fs.ReadFileSync()))
+			createCustomFunction(context, apiObject, "writeFileSync", C.JSObjectCallAsFunctionCallback(fs.WriteFileSync()))
+			createCustomFunction(context, apiObject, "readdirSync", C.JSObjectCallAsFunctionCallback(fs.ReadDirSync()))
+			createCustomFunction(context, apiObject, "mkdirSync", C.JSObjectCallAsFunctionCallback(fs.MkDirSync()))
+		}
+		finalValue = (C.JSValueRef)(apiObject)
+	} else {
+		var content string
+		if strings.HasSuffix(module, ".js") || strings.HasSuffix(module, ".ts") {
+			var b bool = false
+			if strings.HasSuffix(module, ".js") && !fileExists(module+".ts") && !fileExists(module+".js") {
+				moduleWithoutSuffix, _ := strings.CutSuffix(module, ".js")
+				content = utils.ReadFile(moduleWithoutSuffix + ".ts")
+				b = true
+			}
+			if !b {
+				content = utils.ReadFile(module)
+			}
+		} else {
+			if fileExists(module + ".js") {
+				content = utils.ReadFile(module + ".js")
+			} else if fileExists(module + ".ts") {
+				content = utils.ReadFile(module + ".ts")
+			} else {
+				return C.JSValueMakeUndefined(context)
+			}
+		}
 
 		if content == "" {
 			return C.JSValueMakeUndefined(context)
 		}
 
-		exportC := C.CString("exports")
-		exportName := C.JSStringCreateWithUTF8CString(exportC)
-		C.free(unsafe.Pointer(exportC))
-		exportObject := C.JSObjectMake(context, nil, nil)
-		C.JSObjectSetProperty(context, thisObject, exportName, exportObject, C.kJSPropertyAttributeNone, nil)
+		moduleC := C.CString("module")
+		moduleNameR := C.JSStringCreateWithUTF8CString(moduleC)
+		C.free(unsafe.Pointer(moduleC))
+		moduleObject := C.JSObjectMake(context, nil, nil)
+		C.JSObjectSetProperty(context, thisObject, moduleNameR, moduleObject, C.kJSPropertyAttributeNone, nil)
 		contentC := C.CString(content)
 		script := C.JSStringCreateWithUTF8CString(contentC)
 		C.JSEvaluateScript(context, script, nil, nil, 0, exception)
@@ -77,8 +120,15 @@ func RequireF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObj
 		C.JSStringRelease(script)
 		C.free(unsafe.Pointer(contentC))
 
-		finalValue = C.JSObjectGetProperty(context, C.JSContextGetGlobalObject(context), exportName, nil)
-		C.JSStringRelease(exportName)
+		moduleValueScript := C.JSObjectGetProperty(context, C.JSContextGetGlobalObject(context), moduleNameR, nil)
+		C.JSStringRelease(moduleNameR)
+		moduleObjectScript := C.JSValueToObject(context, moduleValueScript, exception)
+
+		exportsName := C.CString("exports")
+		exportsNameJSC := C.JSStringCreateWithUTF8CString(exportsName)
+		finalValue = C.JSObjectGetProperty(context, moduleObjectScript, exportsNameJSC, nil)
+		C.free(unsafe.Pointer(exportsName))
+		C.JSStringRelease(exportsNameJSC)
 	}
 
 	return
