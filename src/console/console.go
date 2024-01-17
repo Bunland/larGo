@@ -1,13 +1,14 @@
 package console
 
 /*
-#cgo CFLAGS: -I/usr/include/webkitgtk-4.0
-#cgo LDFLAGS: -ljavascriptcoregtk-4.0
+#cgo CFLAGS: -I/usr/include/webkitgtk-4.1
+#cgo LDFLAGS: -ljavascriptcoregtk-4.1
 #include <stdlib.h>
 #include <JavaScriptCore/JavaScript.h>
 
 // Declarar las funciones LogF, TimeF, TimeEndF para que C reconozca su existencia.
 extern JSValueRef LogF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef WarnF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef ErrorF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef AssertF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef TimeF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
@@ -36,10 +37,90 @@ type WatcherStruct struct {
 
 var watcher = make(map[string]*WatcherStruct)
 
+func IsConstructor(context C.JSContextRef, value C.JSValueRef, stringToCheck string) (isInstance bool) {
+	constructorString := C.CString(stringToCheck)
+	constructorJSString := C.JSStringCreateWithUTF8CString(constructorString)
+	C.free(unsafe.Pointer(constructorString))
+	constructorValue := C.JSObjectGetProperty(context, C.JSContextGetGlobalObject(context), constructorJSString, nil)
+	C.JSStringRelease(constructorJSString)
+	isInstance = bool(C.JSValueIsInstanceOfConstructor(context, value, constructorValue, nil))
+	return
+}
+
 // Log es la implementación de console.log de JavaScript
 //
 //export LogF
 func LogF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	if int(argumentCount) <= 0 {
+		return C.JSValueMakeUndefined(context)
+	}
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	var text string = ""
+	for i := 0; i < int(argumentCount); i += 1 {
+		if C.JSValueIsString(context, argumentSlice[i]) {
+			str := C.JSValueToStringCopy(context, argumentSlice[i], nil)
+
+			bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+
+			buffer := C.malloc(bufferSize)
+			C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+
+			text += fmt.Sprintf("%s, ", C.GoString((*C.char)(buffer)))
+
+			C.free(unsafe.Pointer(buffer))
+
+			C.JSStringRelease(str)
+		} else if C.JSValueIsObject(context, argumentSlice[i]) && !C.JSValueIsNull(context, argumentSlice[i]) && !C.JSValueIsUndefined(context, argumentSlice[i]) {
+			if IsConstructor(context, argumentSlice[i], "RegExp") || IsConstructor(context, argumentSlice[i], "Error") {
+				str := C.JSValueToStringCopy(context, argumentSlice[i], nil)
+
+				bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+
+				buffer := C.malloc(bufferSize)
+				C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+
+				text += fmt.Sprintf("%s, ", C.GoString((*C.char)(buffer)))
+
+				C.free(unsafe.Pointer(buffer))
+
+				C.JSStringRelease(str)
+			}
+			json := C.JSValueCreateJSONString(context, argumentSlice[i], 0, exception)
+
+			bufferSize := C.JSStringGetMaximumUTF8CStringSize(json)
+			buffer := C.malloc(bufferSize)
+			C.JSStringGetUTF8CString(json, (*C.char)(buffer), bufferSize)
+
+			text += fmt.Sprintf("%s, ", C.GoString((*C.char)(buffer)))
+
+			C.free(unsafe.Pointer(buffer))
+
+			C.JSStringRelease(json)
+		} else if C.JSValueIsNumber(context, argumentSlice[i]) {
+			number := C.JSValueToNumber(context, argumentSlice[i], exception)
+			text += fmt.Sprintf("%.2f, ", float32(number))
+		} else if C.JSValueIsBoolean(context, argumentSlice[i]) {
+			boolean := C.JSValueToBoolean(context, argumentSlice[i])
+			if boolean {
+				text += "true, "
+			} else {
+				text += "false, "
+			}
+		} else if C.JSValueIsNull(context, argumentSlice[i]) {
+			text += "null, "
+		} else if C.JSValueIsUndefined(context, argumentSlice[i]) {
+			text += "undefined, "
+		}
+	}
+	fmt.Println(strings.TrimRight(text, ", "))
+
+	return C.JSValueMakeUndefined(context)
+}
+
+// Warn es la implementación de console.warn de JavaScript
+//
+//export WarnF
+func WarnF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
 	if int(argumentCount) <= 0 {
 		return C.JSValueMakeUndefined(context)
 	}
@@ -52,7 +133,7 @@ func LogF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectR
 		buffer := C.malloc(bufferSize)
 		C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
 
-		fmt.Printf("%s ", C.GoString((*C.char)(buffer)))
+		color.New(color.FgYellow).Printf("%s ", C.GoString((*C.char)(buffer)))
 
 		C.free(unsafe.Pointer(buffer))
 
@@ -314,4 +395,9 @@ func Prompt() C.JSObjectCallAsFunctionCallback {
 // Assert devuelve la función callback de C para la función console.assert() de JavaScript.
 func Assert() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.AssertF)
+}
+
+// Warn devuelve la función callback de C para la función console.warn() de JavaScript.
+func Warn() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.WarnF)
 }
