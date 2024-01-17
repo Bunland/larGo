@@ -1,8 +1,8 @@
 package main
 
 /*
-#cgo CFLAGS: -I/usr/include/webkitgtk-4.0
-#cgo LDFLAGS: -ljavascriptcoregtk-4.0
+#cgo CFLAGS: -I/usr/include/webkitgtk-4.1
+#cgo LDFLAGS: -ljavascriptcoregtk-4.1
 #include <JavaScriptCore/JavaScript.h>
 #include <stdlib.h>
 */
@@ -75,7 +75,7 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	processGlobalObject := C.JSObjectMake(context, nil, nil)
 	processVersionString := C.CString("version")
 	processVersionStringJS := C.JSStringCreateWithUTF8CString(processVersionString)
-	processVersionValue := C.CString("20.10.0")
+	processVersionValue := C.CString("20.11.0")
 	processVersionValueJS := C.JSStringCreateWithUTF8CString(processVersionValue)
 	processVersionValueJSString := C.JSValueMakeString(context, processVersionValueJS)
 	C.JSObjectSetProperty(context, processGlobalObject, processVersionStringJS, processVersionValueJSString, C.kJSPropertyAttributeNone, nil)
@@ -98,6 +98,7 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, globalObject, "print", C.JSObjectCallAsFunctionCallback(console.Log()))
 	createCustomFunction(context, globalObject, "prompt", C.JSObjectCallAsFunctionCallback(console.Prompt()))
 	createCustomFunction(context, consoleGlobalObject, "log", C.JSObjectCallAsFunctionCallback(console.Log()))
+	createCustomFunction(context, consoleGlobalObject, "warn", C.JSObjectCallAsFunctionCallback(console.Warn()))
 	createCustomFunction(context, consoleGlobalObject, "error", C.JSObjectCallAsFunctionCallback(console.Error()))
 	createCustomFunction(context, consoleGlobalObject, "assert", C.JSObjectCallAsFunctionCallback(console.Assert()))
 	createCustomFunction(context, consoleGlobalObject, "time", C.JSObjectCallAsFunctionCallback(console.Time()))
