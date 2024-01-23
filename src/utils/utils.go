@@ -28,17 +28,23 @@ func ReadFile(filename string) string {
 				"emitDecoratorMetadata": true,
 				"allowJs": true,
 			}`,
-			Format: api.FormatCommonJS,
+			Format:       api.FormatCommonJS,
+			Target:       api.ES2022,
+			MinifySyntax: true,
 		})
 		if len(result.Errors) != 0 {
 			os.Exit(1)
 		}
 		return string(result.Code)
+	} else if strings.HasSuffix(filename, ".json") {
+		return string(content)
 	}
 
 	result = api.Transform(string(content), api.TransformOptions{
-		Loader: api.LoaderJS,
-		Format: api.FormatCommonJS,
+		Loader:       api.LoaderJS,
+		Format:       api.FormatCommonJS,
+		Target:       api.ES2022,
+		MinifySyntax: true,
 	})
 
 	return string(result.Code)
