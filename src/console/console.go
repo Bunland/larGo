@@ -16,6 +16,9 @@ extern JSValueRef TimeEndF(JSContextRef context, JSObjectRef function, JSObjectR
 extern JSValueRef ClearF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef ColorF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef PromptF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef CountF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef CountResetF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef TimeLogF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 */
 import "C"
 import (
@@ -23,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 	"unsafe"
@@ -35,7 +39,12 @@ type WatcherStruct struct {
 	label string
 }
 
+type CounterStruct struct {
+	count int
+}
+
 var watcher = make(map[string]*WatcherStruct)
+var counter = make(map[string]*CounterStruct)
 
 func IsConstructor(context C.JSContextRef, value C.JSValueRef, stringToCheck string) (isInstance bool) {
 	constructorString := C.CString(stringToCheck)
@@ -65,7 +74,7 @@ func LogF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectR
 			buffer := C.malloc(bufferSize)
 			C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
 
-			text += fmt.Sprintf("%s, ", C.GoString((*C.char)(buffer)))
+			text += fmt.Sprintf("%s ", C.GoString((*C.char)(buffer)))
 
 			C.free(unsafe.Pointer(buffer))
 
@@ -79,7 +88,7 @@ func LogF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectR
 				buffer := C.malloc(bufferSize)
 				C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
 
-				text += fmt.Sprintf("%s, ", C.GoString((*C.char)(buffer)))
+				text += fmt.Sprintf("%s ", C.GoString((*C.char)(buffer)))
 
 				C.free(unsafe.Pointer(buffer))
 
@@ -98,21 +107,21 @@ func LogF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectR
 			C.JSStringRelease(json)
 		} else if C.JSValueIsNumber(context, argumentSlice[i]) {
 			number := C.JSValueToNumber(context, argumentSlice[i], exception)
-			text += fmt.Sprintf("%.2f, ", float32(number))
+			text += fmt.Sprintf("%s ", strconv.FormatFloat(float64(number), 'f', -1, 64))
 		} else if C.JSValueIsBoolean(context, argumentSlice[i]) {
 			boolean := C.JSValueToBoolean(context, argumentSlice[i])
 			if boolean {
-				text += "true, "
+				text += "true "
 			} else {
-				text += "false, "
+				text += "false "
 			}
 		} else if C.JSValueIsNull(context, argumentSlice[i]) {
-			text += "null, "
+			text += "null "
 		} else if C.JSValueIsUndefined(context, argumentSlice[i]) {
-			text += "undefined, "
+			text += "undefined "
 		}
 	}
-	fmt.Println(strings.TrimRight(text, ", "))
+	fmt.Println(strings.TrimRight(text, " "))
 
 	return C.JSValueMakeUndefined(context)
 }
@@ -343,7 +352,7 @@ func PromptF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObje
 	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
 	buffer := C.malloc(bufferSize)
 	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
-	question := C.GoString((*C.char)(buffer))
+	question := C.GoString((*C.char)(buffer)) + " "
 	fmt.Print(question)
 	reader := bufio.NewReader(os.Stdin)
 	answer, err := reader.ReadString('\n')
@@ -355,6 +364,118 @@ func PromptF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObje
 	file_c_string := C.JSStringCreateWithUTF8CString(c_string)
 	C.free(unsafe.Pointer(c_string))
 	return C.JSValueMakeString(context, file_c_string)
+}
+
+// CountF es la implementación de console.count() de JavaScript
+//
+//export CountF
+func CountF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	var label string
+	if len(argumentSlice) <= 0 {
+		label = "default"
+	} else {
+		str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+		bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+		buffer := C.malloc(bufferSize)
+		C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+		label = C.GoString((*C.char)(buffer))
+		C.free(unsafe.Pointer(buffer))
+	}
+	if _, ok := counter[label]; !ok {
+		counter[label] = &CounterStruct{
+			count: 0,
+		}
+	}
+	counter[label].count += 1
+	fmt.Printf("%s: %d\n", label, counter[label].count)
+	return C.JSValueMakeUndefined(context)
+}
+
+// CountResetF es la implementación de console.countReset() de JavaScript
+//
+//export CountResetF
+func CountResetF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	var label string
+	if len(argumentSlice) <= 0 {
+		label = "default"
+	} else {
+		str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+		bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+		buffer := C.malloc(bufferSize)
+		C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+		label = C.GoString((*C.char)(buffer))
+		C.free(unsafe.Pointer(buffer))
+	}
+	if _, ok := counter[label]; !ok {
+		return C.JSValueMakeUndefined(context)
+	}
+	counter[label].count = 0
+	return C.JSValueMakeUndefined(context)
+}
+
+// TimeLogF es la implementación de console.timeLog() de JavaScript
+//
+//export TimeLogF
+func TimeLogF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) (result C.JSValueRef) {
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	var label string
+	if argumentCount <= 0 {
+		label = "default"
+	} else {
+		str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+		bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+		buffer := C.malloc(bufferSize)
+		C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+		label = C.GoString((*C.char)(buffer))
+		C.free(unsafe.Pointer(buffer))
+	}
+	if _, ok := watcher[label]; !ok {
+		return C.JSValueMakeUndefined(context)
+	}
+	fmt.Printf("%s: %v\n", label, time.Since(watcher[label].start))
+	for i := 1; i < int(argumentCount); i += 1 {
+		if C.JSValueIsString(context, argumentSlice[i]) {
+			str := C.JSValueToStringCopy(context, argumentSlice[i], nil)
+			bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+			buffer := C.malloc(bufferSize)
+			C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+			fmt.Printf("%s ", C.GoString((*C.char)(buffer)))
+			C.free(unsafe.Pointer(buffer))
+		} else if C.JSValueIsObject(context, argumentSlice[i]) && !C.JSValueIsNull(context, argumentSlice[i]) && !C.JSValueIsUndefined(context, argumentSlice[i]) {
+			if IsConstructor(context, argumentSlice[i], "RegExp") || IsConstructor(context, argumentSlice[i], "Error") {
+				str := C.JSValueToStringCopy(context, argumentSlice[i], nil)
+				bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
+				buffer := C.malloc(bufferSize)
+				C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
+				fmt.Printf("%s ", C.GoString((*C.char)(buffer)))
+				C.free(unsafe.Pointer(buffer))
+			}
+			json := C.JSValueCreateJSONString(context, argumentSlice[i], 0, exception)
+			bufferSize := C.JSStringGetMaximumUTF8CStringSize(json)
+			buffer := C.malloc(bufferSize)
+			C.JSStringGetUTF8CString(json, (*C.char)(buffer), bufferSize)
+			fmt.Printf("%s ", C.GoString((*C.char)(buffer)))
+			C.free(unsafe.Pointer(buffer))
+			C.JSStringRelease(json)
+		} else if C.JSValueIsNumber(context, argumentSlice[i]) {
+			number := C.JSValueToNumber(context, argumentSlice[i], exception)
+			fmt.Printf("%f ", number)
+		} else if C.JSValueIsBoolean(context, argumentSlice[i]) {
+			boolean := C.JSValueToBoolean(context, argumentSlice[i])
+			if boolean {
+				fmt.Printf("true ")
+			} else {
+				fmt.Printf("false ")
+			}
+		} else if C.JSValueIsNull(context, argumentSlice[i]) {
+			fmt.Printf("null ")
+		} else if C.JSValueIsUndefined(context, argumentSlice[i]) {
+			fmt.Printf("undefined ")
+		}
+	}
+	return C.JSValueMakeUndefined(context)
 }
 
 // Log devuelve la función de callback de C para la función console.log() en JavaScript.
@@ -400,4 +521,19 @@ func Assert() C.JSObjectCallAsFunctionCallback {
 // Warn devuelve la función callback de C para la función console.warn() de JavaScript.
 func Warn() C.JSObjectCallAsFunctionCallback {
 	return C.JSObjectCallAsFunctionCallback(C.WarnF)
+}
+
+// Count devuelve la función callback de C para la función console.count() de JavaScript.
+func Count() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.CountF)
+}
+
+// CountReset devuelve la función callback de C para la función console.countReset() de JavaScript.
+func CountReset() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.CountResetF)
+}
+
+// TimeLog devuelve la función callback de C para la función console.timeLog() de JavaScript.
+func TimeLog() C.JSObjectCallAsFunctionCallback {
+	return C.JSObjectCallAsFunctionCallback(C.TimeLogF)
 }
