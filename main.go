@@ -17,6 +17,7 @@ import (
 	"largo/src/utils"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"unsafe"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -85,12 +86,6 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	C.JSStringRelease(processVersionValueJS)
 	C.JSObjectSetProperty(context, globalObject, process_js, processGlobalObject, C.kJSPropertyAttributeNone, nil)
 	C.JSStringRelease(process_js)
-	fs_str := C.CString("fs")
-	fs_js := C.JSStringCreateWithUTF8CString(fs_str)
-	C.free(unsafe.Pointer(fs_str))
-	fsGlobalObject := C.JSObjectMake(context, nil, nil)
-	C.JSObjectSetProperty(context, globalObject, fs_js, fsGlobalObject, C.kJSPropertyAttributeNone, nil)
-	C.JSStringRelease(fs_js)
 	createCustomFunction(context, globalObject, "Add", C.JSObjectCallAsFunctionCallback(math.Add()))
 	createCustomFunction(context, globalObject, "Mult", C.JSObjectCallAsFunctionCallback(math.Mult()))
 	createCustomFunction(context, globalObject, "Div", C.JSObjectCallAsFunctionCallback(math.Div()))
@@ -101,11 +96,45 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, consoleGlobalObject, "warn", C.JSObjectCallAsFunctionCallback(console.Warn()))
 	createCustomFunction(context, consoleGlobalObject, "error", C.JSObjectCallAsFunctionCallback(console.Error()))
 	createCustomFunction(context, consoleGlobalObject, "assert", C.JSObjectCallAsFunctionCallback(console.Assert()))
+	createCustomFunction(context, consoleGlobalObject, "count", C.JSObjectCallAsFunctionCallback(console.Count()))
+	createCustomFunction(context, consoleGlobalObject, "countReset", C.JSObjectCallAsFunctionCallback(console.CountReset()))
+	createCustomFunction(context, consoleGlobalObject, "timeLog", C.JSObjectCallAsFunctionCallback(console.TimeLog()))
 	createCustomFunction(context, consoleGlobalObject, "time", C.JSObjectCallAsFunctionCallback(console.Time()))
 	createCustomFunction(context, consoleGlobalObject, "timeEnd", C.JSObjectCallAsFunctionCallback(console.TimeEnd()))
 	createCustomFunction(context, consoleGlobalObject, "clear", C.JSObjectCallAsFunctionCallback(console.Clear()))
 	createCustomFunction(context, larGlobalObject, "color", C.JSObjectCallAsFunctionCallback(console.Color()))
 	modules.Register("fs", "node:fs")
+}
+
+func SetDirnameAndFilename(context C.JSGlobalContextRef, globalObject C.JSObjectRef, dirname string, filename string) {
+	dirname_str := C.CString(dirname)
+	dirname_js := C.JSStringCreateWithUTF8CString(dirname_str)
+	C.free(unsafe.Pointer(dirname_str))
+	dirnameString := C.CString("__dirname")
+	dirnameStringJS := C.JSStringCreateWithUTF8CString(dirnameString)
+	dirnameValue := C.CString(dirname)
+	dirnameValueJS := C.JSStringCreateWithUTF8CString(dirnameValue)
+	dirnameValueJSString := C.JSValueMakeString(context, dirnameValueJS)
+	C.JSObjectSetProperty(context, globalObject, dirnameStringJS, dirnameValueJSString, C.kJSPropertyAttributeNone, nil)
+	C.free(unsafe.Pointer(dirnameString))
+	C.free(unsafe.Pointer(dirnameValue))
+	C.JSStringRelease(dirnameStringJS)
+	C.JSStringRelease(dirnameValueJS)
+	C.JSStringRelease(dirname_js)
+	filename_str := C.CString(filename)
+	filename_js := C.JSStringCreateWithUTF8CString(filename_str)
+	C.free(unsafe.Pointer(filename_str))
+	filenameString := C.CString("__filename")
+	filenameStringJS := C.JSStringCreateWithUTF8CString(filenameString)
+	filenameValue := C.CString(filename)
+	filenameValueJS := C.JSStringCreateWithUTF8CString(filenameValue)
+	filenameValueJSString := C.JSValueMakeString(context, filenameValueJS)
+	C.JSObjectSetProperty(context, globalObject, filenameStringJS, filenameValueJSString, C.kJSPropertyAttributeNone, nil)
+	C.free(unsafe.Pointer(filenameString))
+	C.free(unsafe.Pointer(filenameValue))
+	C.JSStringRelease(filenameStringJS)
+	C.JSStringRelease(filenameValueJS)
+	C.JSStringRelease(filename_js)
 }
 
 func main() {
@@ -124,6 +153,9 @@ func main() {
 			os.Exit(1)
 		}
 		jsFileName := os.Args[2]
+		absolutePath, _ := filepath.Abs(jsFileName)
+		dirname := absolutePath[0 : len(absolutePath)-(len(filepath.Base(jsFileName))+1)]
+		SetDirnameAndFilename(context, globalObject, dirname, absolutePath)
 
 		// Leer el contenido del archivo JavaScript.
 		fileContent := utils.ReadFile(jsFileName)
