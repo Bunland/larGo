@@ -1,0 +1,9 @@
+yarn.lock
+package-lock.json
+bun.lockb
+pnpm-lock.yaml
+go.sum
+node_modules/
+.idea/
+.vscode/
+.DS_Store
