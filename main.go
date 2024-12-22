@@ -11,7 +11,6 @@ import (
 	"bufio"
 	"fmt"
 	"largo/src/console"
-	"largo/src/http"
 	"largo/src/math"
 	"largo/src/modules"
 	"largo/src/require"
@@ -77,7 +76,7 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	processGlobalObject := C.JSObjectMake(context, nil, nil)
 	processVersionString := C.CString("version")
 	processVersionStringJS := C.JSStringCreateWithUTF8CString(processVersionString)
-	processVersionValue := C.CString("20.11.0")
+	processVersionValue := C.CString("22.12.0")
 	processVersionValueJS := C.JSStringCreateWithUTF8CString(processVersionValue)
 	processVersionValueJSString := C.JSValueMakeString(context, processVersionValueJS)
 	C.JSObjectSetProperty(context, processGlobalObject, processVersionStringJS, processVersionValueJSString, C.kJSPropertyAttributeNone, nil)
@@ -93,8 +92,6 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, globalObject, "require", C.JSObjectCallAsFunctionCallback(require.Require()))
 	createCustomFunction(context, globalObject, "print", C.JSObjectCallAsFunctionCallback(console.Log()))
 	createCustomFunction(context, globalObject, "prompt", C.JSObjectCallAsFunctionCallback(console.Prompt()))
-	createCustomFunction(context, globalObject, "serve", C.JSObjectCallAsFunctionCallback(http.Serve()))
-	createCustomFunction(context, globalObject, "get", C.JSObjectCallAsFunctionCallback(http.Get()))
 	createCustomFunction(context, consoleGlobalObject, "log", C.JSObjectCallAsFunctionCallback(console.Log()))
 	createCustomFunction(context, consoleGlobalObject, "warn", C.JSObjectCallAsFunctionCallback(console.Warn()))
 	createCustomFunction(context, consoleGlobalObject, "error", C.JSObjectCallAsFunctionCallback(console.Error()))
@@ -107,6 +104,7 @@ func Apis(context C.JSGlobalContextRef, globalObject C.JSObjectRef) {
 	createCustomFunction(context, consoleGlobalObject, "clear", C.JSObjectCallAsFunctionCallback(console.Clear()))
 	createCustomFunction(context, larGlobalObject, "color", C.JSObjectCallAsFunctionCallback(console.Color()))
 	modules.Register("fs", "node:fs")
+	modules.Register("lar:http", "lar:http")
 }
 
 func SetDirnameAndFilename(context C.JSGlobalContextRef, globalObject C.JSObjectRef, dirname string, filename string) {
@@ -149,6 +147,10 @@ func main() {
 	Apis(context, globalObject)
 
 	// Verificar si hay argumentos de línea de comandos y si se proporciona el comando "run".
+	if len(os.Args) == 1 {
+		color.New(color.BgRed).Println("No command provided")
+		os.Exit(1)
+	}
 	switch os.Args[1] {
 	case "run":
 		if len(os.Args) < 2 {

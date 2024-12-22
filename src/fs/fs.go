@@ -31,11 +31,11 @@ func ReadFileSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.
 	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
 	str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
 	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
-
 	buffer := C.malloc(bufferSize)
 	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
 	file, err := os.ReadFile(C.GoString((*C.char)(buffer)))
 	C.free(unsafe.Pointer(buffer))
+	C.JSStringRelease(str)
 	if err != nil {
 		return C.JSValueMakeUndefined(context)
 	}
@@ -158,16 +158,38 @@ func MkDirSyncF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSO
 
 	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
 	str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
+	defer C.JSStringRelease(str)
+
 	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
 	buffer := C.malloc(bufferSize)
+	defer C.free(unsafe.Pointer(buffer))
+
 	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
 	dirName := C.GoString((*C.char)(buffer))
 
-	err := os.Mkdir(dirName, 0755)
-	C.free(unsafe.Pointer(buffer))
-	if err != nil {
-		return C.JSValueMakeUndefined(context)
+	type Result struct {
+		err error
 	}
+	resultChan := make(chan Result)
+
+	go func() {
+		err := os.Mkdir(dirName, 0755)
+		resultChan <- Result{err}
+	}()
+
+	result := <-resultChan
+
+	if result.err != nil {
+		errorCString := C.CString(result.err.Error())
+		defer C.free(unsafe.Pointer(errorCString))
+
+		errorJSString := C.JSStringCreateWithUTF8CString(errorCString)
+		defer C.JSStringRelease(errorJSString)
+
+		errorValue := C.JSValueMakeString(context, errorJSString)
+		return errorValue
+	}
+
 	return C.JSValueMakeUndefined(context)
 }
 
@@ -178,87 +200,84 @@ func ReadFileF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSOb
 	if int(argumentCount) < 3 {
 		return C.JSValueMakeUndefined(context)
 	}
+
 	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+
+	// Obtener nombre del archivo
 	str := C.JSValueToStringCopy(context, argumentSlice[0], nil)
 	bufferSize := C.JSStringGetMaximumUTF8CStringSize(str)
 	buffer := C.malloc(bufferSize)
 	C.JSStringGetUTF8CString(str, (*C.char)(buffer), bufferSize)
 	fileName := C.GoString((*C.char)(buffer))
 	C.free(unsafe.Pointer(buffer))
+	C.JSStringRelease(str)
+
+	// Obtener encoding
 	strEncoding := C.JSValueToStringCopy(context, argumentSlice[1], nil)
 	bufferSizeEncoding := C.JSStringGetMaximumUTF8CStringSize(strEncoding)
 	bufferEncoding := C.malloc(bufferSizeEncoding)
 	C.JSStringGetUTF8CString(strEncoding, (*C.char)(bufferEncoding), bufferSizeEncoding)
 	encoding := C.GoString((*C.char)(bufferEncoding))
 	C.free(unsafe.Pointer(bufferEncoding))
-	finalValue = C.JSValueMakeUndefined(context)
+	C.JSStringRelease(strEncoding)
+
+	// Obtener función callback
 	functionObject := C.JSValueToObject(context, argumentSlice[2], exception)
+
+	// Canal para resultados
+	type Result struct {
+		data []byte
+		err  error
+	}
+	resultChan := make(chan Result)
+
+	// Leer archivo en goroutine
+	go func() {
+		file, err := os.ReadFile(fileName)
+		resultChan <- Result{file, err}
+	}()
+
+	// Esperar resultado
+	result := <-resultChan
+
+	if result.err != nil {
+		errorCString := C.CString(result.err.Error())
+		errorJSString := C.JSStringCreateWithUTF8CString(errorCString)
+		errorJSStringValue := C.JSValueMakeString(context, errorJSString)
+		nullData := C.JSValueMakeNull(context)
+		callbackArgs := []C.JSValueRef{errorJSStringValue, nullData}
+
+		C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &callbackArgs[0], exception)
+
+		C.free(unsafe.Pointer(errorCString))
+		C.JSStringRelease(errorJSString)
+		return C.JSValueMakeUndefined(context)
+	}
+
+	var fileContent string
 	switch encoding {
 	case "utf8", "utf-8":
-		file, err := os.ReadFile(fileName)
-		if err != nil {
-			errorCString := C.CString(err.Error())
-			errorJSString := C.JSStringCreateWithUTF8CString(errorCString)
-			C.free(unsafe.Pointer(errorCString))
-			errorJSStringValue := C.JSValueMakeString(context, errorJSString)
-			C.JSStringRelease(errorJSString)
-			nullData := C.JSValueMakeNull(context)
-			arguments := []C.JSValueRef{errorJSStringValue, nullData}
-			C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &arguments[0], exception)
-			return
-		}
-		fileStringC := C.CString(string(file))
-		fileStringJS := C.JSStringCreateWithUTF8CString(fileStringC)
-		C.free(unsafe.Pointer(fileStringC))
-		fileStringValue := C.JSValueMakeString(context, fileStringJS)
-		C.JSStringRelease(fileStringJS)
-		nullError := C.JSValueMakeNull(context)
-		arguments := []C.JSValueRef{nullError, fileStringValue}
-		C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &arguments[0], exception)
+		fileContent = string(result.data)
 	case "base64":
-		file, err := os.ReadFile(fileName)
-		if err != nil {
-			errorCString := C.CString(err.Error())
-			errorJSString := C.JSStringCreateWithUTF8CString(errorCString)
-			C.free(unsafe.Pointer(errorCString))
-			errorJSStringValue := C.JSValueMakeString(context, errorJSString)
-			C.JSStringRelease(errorJSString)
-			nullData := C.JSValueMakeNull(context)
-			arguments := []C.JSValueRef{errorJSStringValue, nullData}
-			C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &arguments[0], exception)
-			return
-		}
-		fileStringC := C.CString(base64.StdEncoding.EncodeToString(file))
-		fileStringJS := C.JSStringCreateWithUTF8CString(fileStringC)
-		C.free(unsafe.Pointer(fileStringC))
-		fileStringValue := C.JSValueMakeString(context, fileStringJS)
-		C.JSStringRelease(fileStringJS)
-		nullError := C.JSValueMakeNull(context)
-		arguments := []C.JSValueRef{nullError, fileStringValue}
-		C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &arguments[0], exception)
+		fileContent = base64.StdEncoding.EncodeToString(result.data)
 	case "hex":
-		file, err := os.ReadFile(fileName)
-		if err != nil {
-			errorCString := C.CString(err.Error())
-			errorJSString := C.JSStringCreateWithUTF8CString(errorCString)
-			C.free(unsafe.Pointer(errorCString))
-			errorJSStringValue := C.JSValueMakeString(context, errorJSString)
-			C.JSStringRelease(errorJSString)
-			nullData := C.JSValueMakeNull(context)
-			arguments := []C.JSValueRef{errorJSStringValue, nullData}
-			C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &arguments[0], exception)
-			return
-		}
-		fileStringC := C.CString(hex.EncodeToString(file))
-		fileStringJS := C.JSStringCreateWithUTF8CString(fileStringC)
-		C.free(unsafe.Pointer(fileStringC))
-		fileStringValue := C.JSValueMakeString(context, fileStringJS)
-		C.JSStringRelease(fileStringJS)
-		nullError := C.JSValueMakeNull(context)
-		arguments := []C.JSValueRef{nullError, fileStringValue}
-		C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &arguments[0], exception)
+		fileContent = hex.EncodeToString(result.data)
+	default:
+		fileContent = string(result.data)
 	}
-	return
+
+	fileStringC := C.CString(fileContent)
+	fileStringJS := C.JSStringCreateWithUTF8CString(fileStringC)
+	fileStringValue := C.JSValueMakeString(context, fileStringJS)
+	nullError := C.JSValueMakeNull(context)
+	callbackArgs := []C.JSValueRef{nullError, fileStringValue}
+
+	C.JSObjectCallAsFunction(context, functionObject, thisObject, 2, &callbackArgs[0], exception)
+
+	C.free(unsafe.Pointer(fileStringC))
+	C.JSStringRelease(fileStringJS)
+
+	return C.JSValueMakeUndefined(context)
 }
 
 // ReadFile devuelve la función callback de JavaScript en C para la función fs.readFile() en JavaScript.

@@ -15,13 +15,24 @@ type LarObject = {
   version: string;
 };
 type ServeObject = {
-  port: string
+  port: number
 }
 type ConsoleObject = {
   time: (label?: string) => undefined;
   timeEnd: (label?: string) => undefined;
   timeLog: (label?: string, ...data: any[]) => undefined;
+  /**
+   * Logs anything to the console
+   * @param data The data to log
+   * @returns undefined
+   * @example console.log("Hello, world!")
+   */
   log: (...data: any[]) => undefined;
+  /**
+   * Clears the console
+   * @returns undefined
+   * @example console.clear()
+   */
   clear: () => undefined;
   error: (...data: string[]) => undefined;
   assert: (expression: boolean, ...obj: any[]) => undefined;
@@ -46,8 +57,11 @@ declare const process: ProcessObject;
 declare const __dirname: string;
 /** @deprecated */
 declare const __filename: string;
-declare const serve: (obj: ServeObject) => unknown;
-declare const get: (routeName: string, callback: () => Awaitable<unknown>) => unknown;
+declare module "lar:http" {
+  const serve: (obj: ServeObject) => unknown;
+  const get: (routeName: string, callback: () => Awaitable<any>) => any;
+  const fetch: (url: string) => Awaitable<any>;
+}
 
 declare module "fs" {
   function readFileSync(fileName: string, obj?: ReadFileObject): string;

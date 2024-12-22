@@ -1,4 +1,1 @@
-### GET request to example server
 GET http://localhost:3000/hello
-
-###

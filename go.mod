@@ -1,6 +1,8 @@
 module largo
 
-go 1.18
+go 1.21
+
+toolchain go1.21.5
 
 require (
 	github.com/evanw/esbuild v0.19.7
@@ -10,5 +12,5 @@ require (
 require (
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/sys v0.26.0 // indirect
 )
