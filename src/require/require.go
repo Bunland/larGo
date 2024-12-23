@@ -132,6 +132,7 @@ func RequireF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObj
 			createCustomFunction(context, apiObject, "readFile", C.JSObjectCallAsFunctionCallback(fs.ReadFile()))
 		case "lar:http":
 			createCustomFunction(context, apiObject, "get", C.JSObjectCallAsFunctionCallback(http.Get()))
+			createCustomFunction(context, apiObject, "post", C.JSObjectCallAsFunctionCallback(http.Post()))
 			createCustomFunction(context, apiObject, "fetch", C.JSObjectCallAsFunctionCallback(http.Fetch()))
 			createCustomFunction(context, apiObject, "serve", C.JSObjectCallAsFunctionCallback(http.Serve()))
 		}

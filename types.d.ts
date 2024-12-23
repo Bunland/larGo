@@ -60,6 +60,7 @@ declare const __filename: string;
 declare module "lar:http" {
   const serve: (obj: ServeObject) => unknown;
   const get: (routeName: string, callback: () => Awaitable<any>) => any;
+  const post: (routeName: string, callback: () => Awaitable<any>) => any;
   const fetch: (url: string) => Awaitable<any>;
 }
 

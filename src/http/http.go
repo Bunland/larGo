@@ -7,6 +7,7 @@ package http
 #include <stdlib.h>
 
 extern JSValueRef GetF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
+extern JSValueRef PostF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef ServeF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 extern JSValueRef FetchF(JSContextRef context, JSObjectRef function, JSObjectRef thisObject, size_t argumentCount, JSValueRef arguments[], JSValueRef* exception);
 */
@@ -55,6 +56,76 @@ func GetF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectR
 
 	http.HandleFunc(routeGoStr, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
+			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
+			return
+		}
+
+		response := C.JSObjectCallAsFunction(context, functionObject, thisObject, 0, nil, exception)
+		if response == nil || !C.JSValueIsString(context, response) {
+			fmt.Fprint(w, "")
+			return
+		}
+
+		responseStr := C.JSValueToStringCopy(context, response, exception)
+		if responseStr == nil {
+			fmt.Fprint(w, "")
+			return
+		}
+		defer C.JSStringRelease(responseStr)
+
+		responseBufferSize := C.JSStringGetMaximumUTF8CStringSize(responseStr)
+		responseBuffer := C.malloc(responseBufferSize)
+		if responseBuffer == nil {
+			fmt.Fprint(w, "")
+			return
+		}
+		defer C.free(unsafe.Pointer(responseBuffer))
+
+		C.JSStringGetUTF8CString(responseStr, (*C.char)(responseBuffer), responseBufferSize)
+		responseValue := C.GoString((*C.char)(responseBuffer))
+		fmt.Fprint(w, responseValue)
+	})
+
+	return C.JSValueMakeUndefined(context)
+}
+
+//export PostF
+func PostF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjectRef, argumentCount C.size_t, arguments *C.JSValueRef, exception *C.JSValueRef) C.JSValueRef {
+	// Validar argumentos
+	argumentSlice := (*[1 << 30]C.JSValueRef)(unsafe.Pointer(arguments))[:argumentCount:argumentCount]
+	if len(argumentSlice) <= 0 {
+		return C.JSValueMakeUndefined(context)
+	}
+
+	// Convertir la ruta
+	routeStr := C.JSValueToStringCopy(context, argumentSlice[0], exception)
+	if routeStr == nil {
+		return C.JSValueMakeUndefined(context)
+	}
+	defer C.JSStringRelease(routeStr)
+
+	bufferSize := C.JSStringGetMaximumUTF8CStringSize(routeStr)
+	buffer := C.malloc(bufferSize)
+	if buffer == nil {
+		return C.JSValueMakeUndefined(context)
+	}
+	defer C.free(unsafe.Pointer(buffer))
+
+	C.JSStringGetUTF8CString(routeStr, (*C.char)(buffer), bufferSize)
+	routeGoStr := C.GoString((*C.char)(buffer))
+
+	// Proteger el contexto y la función
+	functionObject := C.JSValueToObject(context, argumentSlice[1], exception)
+	if C.JSValueIsUndefined(context, functionObject) {
+		return C.JSValueMakeUndefined(context)
+	}
+
+	// Proteger las referencias JavaScript
+	C.JSValueProtect(context, C.JSValueRef(functionObject))
+	defer C.JSValueUnprotect(context, C.JSValueRef(functionObject))
+
+	http.HandleFunc(routeGoStr, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
 			http.Error(w, "Invalid request method", http.StatusMethodNotAllowed)
 			return
 		}
@@ -183,3 +254,6 @@ func Serve() C.JSObjectCallAsFunctionCallback { return C.JSObjectCallAsFunctionC
 
 // Fetch devuelve la función callback de C para la función fetch en JavaScript.
 func Fetch() C.JSObjectCallAsFunctionCallback { return C.JSObjectCallAsFunctionCallback(C.FetchF) }
+
+// Post devuelve la función callback de C para la función post en JavaScript.
+func Post() C.JSObjectCallAsFunctionCallback { return C.JSObjectCallAsFunctionCallback(C.PostF) }
