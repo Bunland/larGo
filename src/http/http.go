@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"unsafe"
 )
 
@@ -182,7 +183,35 @@ func FetchF(context C.JSContextRef, function C.JSObjectRef, thisObject C.JSObjec
 	C.JSStringGetUTF8CString(urlStr, (*C.char)(buffer), bufferSize)
 	urlGoStr := C.GoString((*C.char)(buffer))
 
-	response, err := http.Get(urlGoStr)
+	var methodString string = "GET"
+	if len(argumentSlice) >= 2 && !C.JSValueIsUndefined(context, argumentSlice[1]) {
+		objectGet := C.JSValueToObject(context, argumentSlice[1], exception)
+		methodNameInC := C.CString("method")
+		methodNameInJSC := C.JSStringCreateWithUTF8CString(methodNameInC)
+		getValue := C.JSObjectGetProperty(context, objectGet, methodNameInJSC, exception)
+		defer C.free(unsafe.Pointer(methodNameInC))
+		defer C.JSStringRelease(methodNameInJSC)
+		if !C.JSValueIsUndefined(context, getValue) {
+			valueJSString := C.JSValueToStringCopy(context, getValue, exception)
+			bufferJSSize := C.JSStringGetMaximumUTF8CStringSize(valueJSString)
+			bufferJS := C.malloc(bufferJSSize)
+			C.JSStringGetUTF8CString(valueJSString, (*C.char)(bufferJS), bufferJSSize)
+			method := C.GoString((*C.char)(bufferJS))
+			defer C.free(unsafe.Pointer(bufferJS))
+			methods := []string{"CONNECT", "DELETE", "HEAD", "OPTIONS", "POST", "PUT"}
+			if !slices.Contains(methods, method) {
+				methodString = method
+			}
+		}
+	}
+	var response *http.Response
+	var err error
+	switch methodString {
+	case "GET":
+		response, err = http.Get(urlGoStr)
+	default:
+		response, err = http.Get(urlGoStr)
+	}
 	if err != nil {
 		return C.JSValueMakeUndefined(context)
 	}

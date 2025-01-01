@@ -45,6 +45,9 @@ type ModuleObject = {
 }
 type ProcessObject = { version: string };
 type Awaitable<T> = Promise<T> | T
+type FetchObject = {
+  method: "GET" | "POST" | "PUT" | "DELETE" | "CONNECT" | "HEAD" | "OPTIONS";
+}
 declare const Lar: LarObject;
 declare const console: ConsoleObject;
 declare const Add: (a: number, b: number) => number;
@@ -61,7 +64,7 @@ declare module "lar:http" {
   const serve: (obj: ServeObject) => unknown;
   const get: (routeName: string, callback: () => Awaitable<any>) => any;
   const post: (routeName: string, callback: () => Awaitable<any>) => any;
-  const fetch: (url: string) => Awaitable<any>;
+  const fetch: (url: string, obj?: FetchObject) => Awaitable<any>;
 }
 
 declare module "fs" {
