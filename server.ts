@@ -1,14 +1,9 @@
-import { get, fetch, serve, post } from "lar:http"
+import { get, serve, fetch } from "lar:http";
 
 get("/", () => {
-    const myFetch = fetch("https://whenisthenextmcufilm.com/api")
-    console.log(myFetch)
-    return myFetch
-})
+    return fetch("https://whenisthenextmcufilm.com/api", {
+        method: "GET"
+    })
+});
 
-post("/examplePost", () => {
-    console.log("POST Request")
-    return "Example POST Request"
-})
-
-serve({ port: 3000 })
+serve({ port: 3000 });
