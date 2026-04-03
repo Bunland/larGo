@@ -1,8 +1,8 @@
 package math
 
 /*
-#cgo CFLAGS: -I/usr/include/webkitgtk-4.0
-#cgo LDFLAGS: -ljavascriptcoregtk-4.0
+#cgo darwin CFLAGS: -x objective-c
+#cgo darwin LDFLAGS: -framework JavaScriptCore
 #include <JavaScriptCore/JavaScript.h>
 #include <stdlib.h>
 
